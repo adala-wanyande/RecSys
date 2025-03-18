@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from sklearn.model_selection import train_test_split
 
 movies_columns = ["movie_id", "title", "genres"]
 ratings_columns = ["user_id", "movie_id", "rating", "timestamp"]
@@ -55,10 +56,35 @@ for user in all_unique_users:
 # Convert negative samples into a DataFrame
 negative_interactions = pd.DataFrame(negative_samples, columns=["user_id", "movie_id", "label"])
 
-# Step 3: Combine positive and negative interactions
+# Combine positive and negative interactions
 implicit_feedback = pd.concat([positive_interactions, negative_interactions], ignore_index=True)
 
 
-print(implicit_feedback.head())
+# Shuffle dataset to ensure randomness
+implicit_feedback = implicit_feedback.sample(frac=1, random_state=7).reset_index(drop=True)
 
-print("Implicit feedback dataset created successfully!")
+# Split dataset into training (70%), validation (15%), and testing (15%)
+train_data, temp_data = train_test_split(implicit_feedback, test_size=0.3, random_state=7)  # 70% train
+val_data, test_data = train_test_split(temp_data, test_size=0.5, random_state=7)  # Split remaining 30% into 15%-15%
+
+# Display dataset sizes
+print(f"Training Set: {len(train_data)} rows")
+print(f"Validation Set: {len(val_data)} rows")
+print(f"Testing Set: {len(test_data)} rows")
+
+# Save datasets for later use
+train_data.to_csv("./data/train_data.csv", index=False)
+val_data.to_csv("./data/val_data.csv", index=False)
+test_data.to_csv("./data/test_data.csv", index=False)
+
+# Display a preview of the splits
+print("\nTraining Set Sample:")
+print(train_data.head())
+
+print("\nValidation Set Sample:")
+print(val_data.head())
+
+print("\nTesting Set Sample:")
+print(test_data.head())
+
+print("\nData split into Training, Validation, and Testing sets successfully!")
