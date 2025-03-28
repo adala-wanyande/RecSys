@@ -65,4 +65,4 @@ print(f"Test size: {len(test_df)} ({len(test_df)/len(df_full)*100:.2f}%)")
 
 train_df.to_csv('./data/train_df.csv', index=False)
 val_df.to_csv('./data/val_df.csv', index=False)
-test_df.to_csv('/data/test_df.csv', index=False)
+test_df.to_csv('./data/test_df.csv', index=False)
