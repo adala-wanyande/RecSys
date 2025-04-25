@@ -22,6 +22,7 @@ parser.add_argument("--num_layers", type=int, default=3)
 parser.add_argument("--num_heads", type=int, default=4)
 parser.add_argument("--dropout", type=float, default=0.2)
 parser.add_argument("--seq_len", type=int, default=100)
+parser.add_argument("--scheduler", type=str, default="cosine", choices=["cosine", "step", "plateau"])
 parser.add_argument("--model_save_path", type=str, default="best_bert4rec.pth")
 args = parser.parse_args()
 
@@ -105,11 +106,17 @@ def train():
     total_steps = len(train_loader) * EPOCHS
     warmup_steps = int(0.1 * total_steps)
 
-    scheduler = get_cosine_schedule_with_warmup(
-        optimizer,
-        num_warmup_steps=warmup_steps,
-        num_training_steps=total_steps
-    )
+    # Scheduler selection
+    if args.scheduler == "cosine":
+        scheduler = get_cosine_schedule_with_warmup(
+            optimizer,
+            num_warmup_steps=warmup_steps,
+            num_training_steps=total_steps
+        )
+    elif args.scheduler == "step":
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.5)
+    elif args.scheduler == "plateau":
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', patience=3, factor=0.5, verbose=True)
 
     criterion = nn.CrossEntropyLoss(ignore_index=-100)
 
@@ -132,12 +139,15 @@ def train():
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            scheduler.step()
+
+            if args.scheduler in ["cosine", "step"]:
+                scheduler.step()
 
             total_loss += loss.item()
 
         avg_loss = total_loss / len(train_loader)
-        print(f"Epoch {epoch} - Train Loss: {avg_loss:.4f}")
+        current_lr = optimizer.param_groups[0]['lr']
+        print(f"Epoch {epoch} - Train Loss: {avg_loss:.4f} - LR: {current_lr:.6f}")
 
         model.eval()
         all_logits, all_labels = [], []
@@ -152,6 +162,9 @@ def train():
 
         val_ndcg = compute_ndcg_k(all_logits, all_labels, k=10)
         print(f"Validation NDCG@10: {val_ndcg:.4f}")
+
+        if args.scheduler == "plateau":
+            scheduler.step(val_ndcg)
 
         if val_ndcg > best_val_ndcg:
             best_val_ndcg = val_ndcg
