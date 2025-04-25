@@ -1,6 +1,8 @@
 import torch
-print(torch.cuda.is_available())
-print(torch.cuda.get_device_name())
+print("CUDA available:", torch.cuda.is_available())
+if torch.cuda.is_available():
+    print("GPU:", torch.cuda.get_device_name(0))
+
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from bert4rec_model import BERT4Rec
@@ -19,11 +21,11 @@ parser.add_argument("--hidden_size", type=int, default=256)
 parser.add_argument("--num_layers", type=int, default=3)
 parser.add_argument("--num_heads", type=int, default=4)
 parser.add_argument("--dropout", type=float, default=0.2)
+parser.add_argument("--seq_len", type=int, default=100)
 parser.add_argument("--model_save_path", type=str, default="best_bert4rec.pth")
 args = parser.parse_args()
 
 # Constants
-SEQUENCE_LENGTH = 100
 MASK_PROB = 0.15
 EPOCHS = 200
 PATIENCE = 20
@@ -31,9 +33,10 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 MASK_TOKEN = 1  # Reserved index for [MASK] token
 
 class BERT4RecDataset(Dataset):
-    def __init__(self, dataframe, vocab_size):
+    def __init__(self, dataframe, vocab_size, seq_len):
         self.sequences = dataframe["sequence"].tolist()
         self.vocab_size = vocab_size
+        self.seq_len = seq_len
 
     def __len__(self):
         return len(self.sequences)
@@ -41,16 +44,20 @@ class BERT4RecDataset(Dataset):
     def __getitem__(self, idx):
         sequence = self.sequences[idx]
         input_ids = sequence.copy()
-        labels = [-100] * SEQUENCE_LENGTH
+        labels = [-100] * self.seq_len
 
-        for i in range(SEQUENCE_LENGTH):
-            if input_ids[i] != 0 and random.random() < MASK_PROB:
+        for i in range(self.seq_len):
+            if i < len(input_ids) and input_ids[i] != 0 and random.random() < MASK_PROB:
                 labels[i] = input_ids[i]
                 rand = random.random()
                 if rand < 0.8:
                     input_ids[i] = MASK_TOKEN
                 elif rand < 0.9:
                     input_ids[i] = random.randint(2, self.vocab_size - 1)
+
+        input_ids = input_ids[:self.seq_len]
+        if len(input_ids) < self.seq_len:
+            input_ids = [0] * (self.seq_len - len(input_ids)) + input_ids
 
         input_ids = torch.tensor(input_ids, dtype=torch.long)
         labels = torch.tensor(labels, dtype=torch.long)
@@ -83,14 +90,14 @@ def train():
     model = BERT4Rec(
         num_items=vocab_size - 2,
         hidden_size=args.hidden_size,
-        max_seq_len=SEQUENCE_LENGTH,
+        max_seq_len=args.seq_len,
         num_layers=args.num_layers,
         num_heads=args.num_heads,
         dropout=args.dropout
     ).to(DEVICE)
 
-    train_dataset = BERT4RecDataset(train_df, vocab_size)
-    val_dataset = BERT4RecDataset(val_df, vocab_size)
+    train_dataset = BERT4RecDataset(train_df, vocab_size, args.seq_len)
+    val_dataset = BERT4RecDataset(val_df, vocab_size, args.seq_len)
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size)
 
