@@ -1,4 +1,6 @@
 import torch
+print(torch.cuda.is_available())
+print(torch.cuda.get_device_name())
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from bert4rec_model import BERT4Rec
